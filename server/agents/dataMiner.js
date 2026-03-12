@@ -1,3 +1,8 @@
+// Data Miner — Mike / Director of Intelligence
+// Scrapes TikTok using Apify to collect viral content for research
+// Identifies trending hashtags, analyzes engagement metrics, and stores data
+// Cost monitoring: ~$2.50 per 1,000 results from Apify API
+
 import { ApifyClient } from 'apify-client';
 import dotenv from 'dotenv';
 dotenv.config();

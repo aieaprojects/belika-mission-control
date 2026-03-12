@@ -77,7 +77,7 @@ export default function AgentRoster({ agents, agentStatuses }) {
 
       {agents.length === 0 && (
         <div className="agent-roster">
-          {['🦅 Henry · COO', '⛏️ Data Miner · Intelligence', '🧠 Signal Processor · Creative'].map((label, i) => (
+          {['🦅 Henry · COO', '⛏️ Mike · Intelligence', '🧠 Roger · Creative'].map((label, i) => (
             <div className="agent-card" key={i}>
               <div className="agent-avatar">{label.split(' ')[0]}</div>
               <div className="agent-name">{label.split('·')[0].slice(2).trim()}</div>

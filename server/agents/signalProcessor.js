@@ -1,4 +1,4 @@
-// Signal Processor — VP of Creative
+// Signal Processor — Roger / VP of Creative
 // Analyzes scraped data to identify psychological triggers behind viral content
 // In production, this would call Gemini 2.5 Flash for NLP analysis.
 // For now, uses pattern matching + scoring to classify trends.

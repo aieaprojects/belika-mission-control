@@ -129,8 +129,8 @@ app.get('/api/trends/top', (req, res) => {
 app.get('/api/agents', (req, res) => {
   const agents = [
     { name: 'Henry', role: 'System Orchestrator / COO', codename: 'orchestrator', status: 'idle' },
-    { name: 'Data Miner', role: 'Director of Intelligence', codename: 'data_miner', status: 'idle' },
-    { name: 'Signal Processor', role: 'VP of Creative', codename: 'signal_processor', status: 'idle' },
+    { name: 'Mike', role: 'Director of Intelligence', codename: 'data_miner', status: 'idle' },
+    { name: 'Roger', role: 'VP of Creative', codename: 'signal_processor', status: 'idle' },
   ];
   res.json(agents);
 });
