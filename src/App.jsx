@@ -3,9 +3,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Header from './components/Header.jsx'
 import TrendMatrix from './components/TrendMatrix.jsx'
 import OpexTracker from './components/OpexTracker.jsx'
-import AgentRoster from './components/AgentRoster.jsx'
+import AgentCards from './components/AgentCards.jsx'
 import OfficeBoard from './components/OfficeBoard.jsx'
 import StatusBar from './components/StatusBar.jsx'
+import ViralConceptsPanel from './components/ViralConceptsPanel.jsx'
+import ExecutePanel from './components/ExecutePanel.jsx'
 
 export default function App() {
   const [trends, setTrends] = useState([])
@@ -28,9 +30,6 @@ export default function App() {
         const res = await fetch(API_BASE + '/api/gateway-health')
         const data = await res.json()
         setGatewayOnline(data.online)
-        if (data.online) {
-          addActivity('gateway', `🛰️ OpenClaw Gateway online (${data.url})`, 'completed')
-        }
       } catch {
         setGatewayOnline(false)
       }
@@ -56,7 +55,7 @@ export default function App() {
     }
   }, [])
 
-  // ─── WebSocket — Real-time updates + Terminal stream ───
+  // ─── WebSocket ─────────────────────────────────────────
   useEffect(() => {
     const connect = () => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -71,22 +70,18 @@ export default function App() {
         try {
           const data = JSON.parse(event.data)
 
-          // Agent status updates
           if (data.type === 'agent_update') {
             setAgentStatuses(prev => ({
               ...prev,
               [data.agent]: { status: data.status, message: data.message },
             }))
             addActivity(data.agent, data.message, data.status)
-
-            // If orchestrator completed/failed, stop executing and refresh data
             if (data.agent === 'orchestrator' && (data.status === 'completed' || data.status === 'failed')) {
               setIsExecuting(false)
               fetchData()
             }
           }
 
-          // Live terminal output from VPS
           if (data.type === 'terminal') {
             setTerminalLog(prev => [
               { line: data.line, time: new Date().toLocaleTimeString() },
@@ -94,22 +89,14 @@ export default function App() {
             ])
           }
 
-          // Fresh trends data from remote VPS SQLite
           if (data.type === 'trends_update') {
             setTrends(data.trends)
             addActivity('system', `📊 ${data.trends.length} trends received from VPS`, 'completed')
           }
-
-        } catch {
-          // Non-JSON, ignore
-        }
+        } catch { /* ignore */ }
       }
 
-      ws.onclose = () => {
-        setWsConnected(false)
-        setTimeout(connect, 3000)
-      }
-
+      ws.onclose = () => { setWsConnected(false); setTimeout(connect, 3000) }
       ws.onerror = () => ws.close()
       wsRef.current = ws
     }
@@ -127,75 +114,56 @@ export default function App() {
     ])
   }
 
-  // ─── Execute Research Protocol → Remote OpenClaw ──────
+  // ─── Actions ───────────────────────────────────────────
   async function handleExecute() {
     setIsExecuting(true)
-    setTerminalLog([]) // Clear terminal for fresh run
+    setTerminalLog([])
     setAgentStatuses({
       orchestrator: { status: 'running', message: 'Dispatching to OpenClaw Gateway...' },
       data_miner: { status: 'idle', message: 'Standby' },
       signal_processor: { status: 'idle', message: 'Standby' },
     })
     addActivity('orchestrator', '🦅 EXECUTE RESEARCH PROTOCOL → OpenClaw Gateway', 'running')
-
     try {
       const res = await fetch(API_BASE + '/api/execute', { method: 'POST' })
       const result = await res.json()
-      if (!res.ok) {
-        addActivity('system', `❌ ${result.error}`, 'failed')
-        setIsExecuting(false)
-      } else {
-        addActivity('gateway', `✅ Dispatched (session: ${result.sessionId || 'active'})`, 'completed')
-      }
-    } catch (err) {
-      setIsExecuting(false)
-      addActivity('system', `❌ ${err.message}`, 'failed')
-    }
+      if (!res.ok) { addActivity('system', `❌ ${result.error}`, 'failed'); setIsExecuting(false) }
+      else { addActivity('gateway', `✅ Dispatched`, 'completed') }
+    } catch (err) { setIsExecuting(false); addActivity('system', `❌ ${err.message}`, 'failed') }
   }
 
-  // ─── Sync Data from VPS ───────────────────────────────
   async function handleSyncVPS() {
     setIsSyncing(true)
     addActivity('orchestrator', '🔄 Syncing data from Hostinger VPS...', 'running')
     try {
       const res = await fetch(API_BASE + '/api/sync-trends', { method: 'POST' })
-      const contentType = res.headers.get('content-type')
-      if (contentType && contentType.includes('application/json')) {
+      const ct = res.headers.get('content-type')
+      if (ct && ct.includes('application/json')) {
         const result = await res.json()
         if (result.success) {
           await fetchData()
           addActivity('orchestrator', `✅ Sincronizado: ${result.count} videos`, 'completed')
-        } else {
-          addActivity('orchestrator', `❌ Error: ${result.error}`, 'failed')
-        }
-      } else {
-        addActivity('system', '❌ VPS returned non-JSON response', 'failed')
-      }
-    } catch (err) {
-      addActivity('system', `❌ Sync error: ${err.message}`, 'failed')
-    } finally {
-      setIsSyncing(false)
-    }
+        } else { addActivity('orchestrator', `❌ ${result.error}`, 'failed') }
+      } else { addActivity('system', '❌ VPS returned non-JSON', 'failed') }
+    } catch (err) { addActivity('system', `❌ ${err.message}`, 'failed') }
+    finally { setIsSyncing(false) }
   }
 
-  // ─── Re-analyze / refresh from VPS ────────────────────
   async function handleAnalyze() {
     setIsExecuting(true)
-    addActivity('orchestrator', '🔬 Refreshing data from VPS...', 'running')
-    try {
-      await fetch(API_BASE + '/api/analyze', { method: 'POST' })
-      await fetchData()
-    } catch (err) {
-      addActivity('system', `Error: ${err.message}`, 'failed')
-    }
+    addActivity('orchestrator', '🔬 Analyzing data...', 'running')
+    try { await fetch(API_BASE + '/api/analyze', { method: 'POST' }); await fetchData() }
+    catch (err) { addActivity('system', `Error: ${err.message}`, 'failed') }
     setIsExecuting(false)
   }
 
   const tabs = [
     { id: 'dashboard', label: '📊 Dashboard' },
+    { id: 'agents', label: '🤖 Agents' },
     { id: 'trends', label: '📈 Trend Matrix' },
-    { id: 'terminal', label: '🖥️ Terminal' },
-    { id: 'office', label: '🏢 Office Board' },
+    { id: 'concepts', label: '💡 Viral Concepts' },
+    { id: 'execute', label: '🚀 Execute' },
+    { id: 'office', label: '🏢 Office' },
   ]
 
   return (
@@ -217,15 +185,10 @@ export default function App() {
             onClick={() => setActiveTab(tab.id)}
           >
             {tab.label}
-            {tab.id === 'terminal' && terminalLog.length > 0 && (
+            {tab.id === 'execute' && terminalLog.length > 0 && (
               <span style={{
-                marginLeft: 6,
-                background: '#f59e0b',
-                color: '#000',
-                borderRadius: 8,
-                padding: '1px 6px',
-                fontSize: 10,
-                fontWeight: 700,
+                marginLeft: 6, background: '#f59e0b', color: '#000',
+                borderRadius: 8, padding: '1px 6px', fontSize: 10, fontWeight: 700,
               }}>{terminalLog.length}</span>
             )}
           </button>
@@ -233,6 +196,7 @@ export default function App() {
       </nav>
 
       <main className="main-content">
+        {/* ─── DASHBOARD TAB ─── */}
         {activeTab === 'dashboard' && (
           <>
             <div className="bento-grid">
@@ -259,8 +223,7 @@ export default function App() {
                           <div className="activity-dot" style={{
                             background: item.status === 'completed' ? '#22c55e'
                               : item.status === 'running' ? '#3b82f6'
-                              : item.status === 'failed' ? '#ef4444'
-                              : '#6b7280',
+                              : item.status === 'failed' ? '#ef4444' : '#6b7280',
                           }} />
                           <div className="activity-content">
                             <div className="activity-message">{item.message}</div>
@@ -273,18 +236,53 @@ export default function App() {
                 </div>
               </div>
             </div>
-
             <div className="bento-grid">
               <div className="bento-4">
                 <OpexTracker opex={opex} />
               </div>
               <div className="bento-8">
-                <AgentRoster agents={agents} agentStatuses={agentStatuses} />
+                <div className="glass-card">
+                  <div className="card-header">
+                    <div className="card-title"><span className="card-title-icon">📊</span> Quick Stats</div>
+                  </div>
+                  <div className="opex-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                    <div className="opex-stat">
+                      <div className="opex-stat-label">Videos Scraped</div>
+                      <div className="opex-stat-value">{trends.length}</div>
+                    </div>
+                    <div className="opex-stat">
+                      <div className="opex-stat-label">Platforms</div>
+                      <div className="opex-stat-value">{[...new Set(trends.map(t => t.platform))].length}</div>
+                    </div>
+                    <div className="opex-stat">
+                      <div className="opex-stat-label">Trigger Types</div>
+                      <div className="opex-stat-value">{[...new Set(trends.filter(t => t.trigger_type && t.trigger_type !== 'Unclassified').map(t => t.trigger_type))].length}</div>
+                    </div>
+                    <div className="opex-stat">
+                      <div className="opex-stat-label">Total Reach</div>
+                      <div className="opex-stat-value">{(trends.reduce((a, t) => a + (t.views || 0), 0) / 1000000).toFixed(1)}<span className="opex-stat-unit">M</span></div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </>
         )}
 
+        {/* ─── AGENTS TAB ─── */}
+        {activeTab === 'agents' && (
+          <AgentCards
+            agentStatuses={agentStatuses}
+            trends={trends}
+            isExecuting={isExecuting}
+            onRunAgent={(codename) => {
+              addActivity(codename, `▶ Manual run triggered for ${codename}`, 'running')
+              handleExecute()
+            }}
+          />
+        )}
+
+        {/* ─── TRENDS TAB ─── */}
         {activeTab === 'trends' && (
           <div className="bento-grid">
             <div className="bento-full">
@@ -293,77 +291,28 @@ export default function App() {
           </div>
         )}
 
-        {/* ─── LIVE TERMINAL TAB ─── */}
-        {activeTab === 'terminal' && (
-          <div className="bento-grid">
-            <div className="bento-full">
-              <div className="glass-card">
-                <div className="card-header">
-                  <div className="card-title">
-                    <span className="card-title-icon">🖥️</span> VPS Terminal — Live Output
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span className="card-badge" style={{
-                      background: isExecuting ? 'rgba(59,130,246,0.2)' : 'rgba(107,114,128,0.2)',
-                      color: isExecuting ? '#60a5fa' : '#9ca3af',
-                    }}>
-                      {isExecuting ? '● STREAMING' : '○ IDLE'}
-                    </span>
-                    <button
-                      onClick={() => setTerminalLog([])}
-                      style={{
-                        background: 'rgba(255,255,255,0.05)',
-                        border: '1px solid #27272a',
-                        color: '#9ca3af',
-                        padding: '4px 10px',
-                        borderRadius: 6,
-                        fontSize: 11,
-                        cursor: 'pointer',
-                      }}
-                    >Clear</button>
-                  </div>
-                </div>
-                <div style={{
-                  background: '#000000',
-                  borderRadius: 8,
-                  padding: 16,
-                  fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                  fontSize: 12,
-                  lineHeight: 1.6,
-                  maxHeight: 500,
-                  overflowY: 'auto',
-                  border: '1px solid #1a1a1a',
-                }}>
-                  {terminalLog.length === 0 ? (
-                    <div style={{ color: '#4a4a4a' }}>
-                      <div>{'>'} Awaiting signal from OpenClaw Gateway...</div>
-                      <div>{'>'} Click ⚡ EXECUTE RESEARCH PROTOCOL to begin</div>
-                      <div style={{ opacity: 0.5 }}>{'>'} Target: 187.124.153.19 (Hostinger VPS)</div>
-                    </div>
-                  ) : (
-                    [...terminalLog].reverse().map((entry, i) => (
-                      <div key={i} style={{
-                        color: entry.line.includes('✅') ? '#22c55e'
-                          : entry.line.includes('❌') || entry.line.includes('FATAL') ? '#ef4444'
-                          : entry.line.includes('⚠️') ? '#f59e0b'
-                          : entry.line.includes('═') || entry.line.includes('─') ? '#3b82f6'
-                          : entry.line.includes('📡') || entry.line.includes('🛰️') ? '#a855f7'
-                          : entry.line.includes('🦅') ? '#f59e0b'
-                          : '#e4e4e7',
-                        borderBottom: entry.line.includes('═') ? 'none' : '1px solid #111',
-                        padding: '2px 0',
-                      }}>
-                        <span style={{ color: '#4a4a4a', marginRight: 8 }}>[{entry.time}]</span>
-                        {entry.line}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+        {/* ─── VIRAL CONCEPTS TAB ─── */}
+        {activeTab === 'concepts' && (
+          <ViralConceptsPanel
+            trends={trends}
+            isExecuting={isExecuting}
+            onAnalyze={handleAnalyze}
+          />
         )}
 
+        {/* ─── EXECUTE TAB ─── */}
+        {activeTab === 'execute' && (
+          <ExecutePanel
+            isExecuting={isExecuting}
+            terminalLog={terminalLog}
+            agentStatuses={agentStatuses}
+            onExecute={handleExecute}
+            onSyncVPS={handleSyncVPS}
+            isSyncing={isSyncing}
+          />
+        )}
+
+        {/* ─── OFFICE TAB ─── */}
         {activeTab === 'office' && (
           <div className="bento-grid">
             <div className="bento-full">
