@@ -329,3 +329,30 @@ app.get('/api/gateway-health', (req, res) => {
 server.listen(PORT, () => {
   console.log(`🦅 Mission Control API Online — Port ${PORT}`);
 });
+
+// 🆕 API endpoint to pull latest code from GitHub
+app.post('/api/update', async (req, res) => {
+  broadcastTerminal('⬇️ Syncing latest code from GitHub...');
+  
+  try {
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+    
+    // Pull from GitHub
+    const { stdout, stderr } = await execAsync('cd /data/.openclaw/workspace/belika-mission-control && git pull origin main');
+    
+    broadcastTerminal('✅ Code updated: ' + stdout);
+    broadcastTerminal('🔄 Restarting services...');
+    
+    // Restart pm2
+    await execAsync('pm2 restart all');
+    
+    broadcastTerminal('✅ Mission Control updated and restarted!');
+    
+    res.json({ status: 'updated', output: stdout });
+  } catch (err) {
+    broadcastTerminal('❌ Update failed: ' + err.message);
+    res.json({ status: 'failed', error: err.message });
+  }
+});
