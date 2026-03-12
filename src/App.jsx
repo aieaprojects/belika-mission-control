@@ -1,3 +1,4 @@
+import { API_BASE } from './services/api';
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Header from './components/Header.jsx'
 import TrendMatrix from './components/TrendMatrix.jsx'
@@ -23,7 +24,7 @@ export default function App() {
   useEffect(() => {
     async function probeGateway() {
       try {
-        const res = await fetch('/api/gateway-health')
+        const res = await fetch(API_BASE + '/api/gateway-health')
         const data = await res.json()
         setGatewayOnline(data.online)
         if (data.online) {
@@ -42,9 +43,9 @@ export default function App() {
   const fetchData = useCallback(async () => {
     try {
       const [trendsRes, agentsRes, opexRes] = await Promise.all([
-        fetch('/api/trends'),
-        fetch('/api/agents'),
-        fetch('/api/opex'),
+        fetch(API_BASE + '/api/trends'),
+        fetch(API_BASE + '/api/agents'),
+        fetch(API_BASE + '/api/opex'),
       ])
       setTrends(await trendsRes.json())
       setAgents(await agentsRes.json())
@@ -137,7 +138,7 @@ export default function App() {
     addActivity('orchestrator', '🦅 EXECUTE RESEARCH PROTOCOL → OpenClaw Gateway', 'running')
 
     try {
-      const res = await fetch('/api/execute', { method: 'POST' })
+      const res = await fetch(API_BASE + '/api/execute', { method: 'POST' })
       const result = await res.json()
       if (!res.ok) {
         addActivity('system', `❌ ${result.error}`, 'failed')
@@ -156,7 +157,7 @@ export default function App() {
     setIsExecuting(true)
     addActivity('orchestrator', '🔬 Refreshing data from VPS...', 'running')
     try {
-      await fetch('/api/analyze', { method: 'POST' })
+      await fetch(API_BASE + '/api/analyze', { method: 'POST' })
       await fetchData()
     } catch (err) {
       addActivity('system', `Error: ${err.message}`, 'failed')
