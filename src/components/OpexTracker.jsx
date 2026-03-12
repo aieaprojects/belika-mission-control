@@ -1,5 +1,5 @@
 export default function OpexTracker({ opex }) {
-  const { totals = {}, breakdown = [] } = opex
+  const { totals = {}, breakdown = [], systemCosts = [] } = opex
 
   return (
     <div className="glass-card" style={{ height: '100%' }}>
@@ -26,15 +26,32 @@ export default function OpexTracker({ opex }) {
           <div className="opex-stat-unit">{totals.total_apify_results || 0} results</div>
         </div>
         <div className="opex-stat">
-          <div className="opex-stat-label">Gemini Burn</div>
-          <div className="opex-stat-value">
-            ${(totals.total_gemini_cost || 0).toFixed(4)}
+          <div className="opex-stat-label">Henry Burn</div>
+          <div className="opex-stat-value" style={{ color: '#a855f7' }}>
+            ${(totals.henry_burn_rate || 0).toFixed(4)}
           </div>
-          <div className="opex-stat-unit">
-            {(totals.total_gemini_input || 0) + (totals.total_gemini_output || 0)} tokens
-          </div>
+          <div className="opex-stat-unit">{totals.henry_entries || 0} API calls</div>
         </div>
       </div>
+
+      {/* Henry's system_costs breakdown */}
+      {systemCosts.length > 0 && (
+        <div className="opex-breakdown">
+          <div className="card-title" style={{ fontSize: 11, marginBottom: 8, color: '#a855f7' }}>
+            🦅 Henry's API Burn Rate
+          </div>
+          {systemCosts.slice(0, 10).map((row, i) => (
+            <div className="opex-row" key={`sc-${i}`}>
+              <span className="opex-row-label">
+                {row.service || 'Unknown'} · {row.details ? row.details.substring(0, 40) : ''}
+              </span>
+              <span className="opex-row-value" style={{ color: '#a855f7' }}>
+                ${(row.cost_usd || 0).toFixed(4)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="opex-breakdown">
         <div className="card-title" style={{ fontSize: 11, marginBottom: 8 }}>
@@ -70,6 +87,7 @@ export default function OpexTracker({ opex }) {
           <div>  Apify: ~$2.50 / 1,000 results</div>
           <div>  Gemini Flash: $0.075/1M input · $0.30/1M output</div>
           <div>  Total Runs: {totals.total_runs || 0}</div>
+          <div style={{ color: '#a855f7' }}>  🦅 Henry Burn: ${(totals.henry_burn_rate || 0).toFixed(4)} ({totals.henry_entries || 0} entries)</div>
         </div>
       </div>
     </div>

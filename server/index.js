@@ -7,6 +7,19 @@ import db from './db.js';
 
 dotenv.config();
 
+// ═══════════════════════════════════════════════════════
+// LOCAL DB: Add system_costs table (mirrors VPS schema)
+// ═══════════════════════════════════════════════════════
+db.exec(`
+  CREATE TABLE IF NOT EXISTS system_costs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service TEXT,
+    cost_usd REAL,
+    details TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -72,6 +85,24 @@ const clients = new Set();
 wss.on('connection', (ws) => {
   clients.add(ws);
   ws.send(JSON.stringify({ type: 'connected', message: 'Mission Control WebSocket Online' }));
+
+  // ─── HENRY'S SYSTEM OVERRIDE ───────────────────────
+  // Permanent startup message broadcast to every new client
+  setTimeout(() => {
+    ws.send(JSON.stringify({
+      type: 'agent_update',
+      agent: 'orchestrator',
+      status: 'completed',
+      message: 'SYSTEM OVERRIDE: Henry (System Orchestrator) has accessed Mission Control. Synchronization complete.',
+      timestamp: new Date().toISOString(),
+    }));
+    ws.send(JSON.stringify({
+      type: 'terminal',
+      line: '🦅 SYSTEM OVERRIDE: Henry (System Orchestrator) has accessed Mission Control. Synchronization complete.',
+      timestamp: new Date().toISOString(),
+    }));
+  }, 500);
+
   ws.on('close', () => clients.delete(ws));
 });
 
@@ -152,8 +183,9 @@ app.get('/api/agents', (req, res) => {
   res.json(agents);
 });
 
-// GET /api/opex — financial summary
-app.get('/api/opex', (req, res) => {
+// GET /api/opex — financial summary (local opex_ledger + remote system_costs)
+app.get('/api/opex', async (req, res) => {
+  // Local OPEX ledger totals
   const totals = db.prepare(`
     SELECT
       COALESCE(SUM(apify_cost), 0) as total_apify_cost,
@@ -174,7 +206,70 @@ app.get('/api/opex', (req, res) => {
     LIMIT 20
   `).all();
 
-  res.json({ totals, breakdown });
+  // Local system_costs (synced from VPS)
+  const systemCosts = db.prepare(`
+    SELECT * FROM system_costs ORDER BY timestamp DESC LIMIT 50
+  `).all();
+
+  const systemCostTotal = db.prepare(`
+    SELECT
+      COALESCE(SUM(cost_usd), 0) as total_burn,
+      COUNT(*) as total_entries
+    FROM system_costs
+  `).get();
+
+  // Merge into unified response
+  totals.total_cost = (totals.total_cost || 0) + (systemCostTotal.total_burn || 0);
+  totals.henry_burn_rate = systemCostTotal.total_burn || 0;
+  totals.henry_entries = systemCostTotal.total_entries || 0;
+
+  res.json({ totals, breakdown, systemCosts });
+});
+
+// POST /api/sync-costs — fetch system_costs from VPS and sync locally
+app.post('/api/sync-costs', async (req, res) => {
+  try {
+    const result = await openclawExec(
+      `sqlite3 -json ${REMOTE_DB_PATH} 'SELECT * FROM system_costs ORDER BY timestamp DESC LIMIT 100;'`,
+      false
+    );
+
+    if (result.ok) {
+      let costs = [];
+      const rawOutput = result.data?.output || result.data;
+      if (typeof rawOutput === 'string') {
+        try {
+          costs = JSON.parse(rawOutput);
+        } catch {
+          const jsonMatch = rawOutput.match(/\[[\s\S]*\]/);
+          if (jsonMatch) costs = JSON.parse(jsonMatch[0]);
+        }
+      } else if (Array.isArray(rawOutput)) {
+        costs = rawOutput;
+      }
+
+      if (costs.length > 0) {
+        // Upsert into local system_costs
+        const upsert = db.prepare(`
+          INSERT OR REPLACE INTO system_costs (service, cost_usd, details, timestamp)
+          VALUES (?, ?, ?, ?)
+        `);
+        const syncMany = db.transaction((items) => {
+          for (const c of items) {
+            upsert.run(c.service || '', c.cost_usd || 0, c.details || '', c.timestamp || new Date().toISOString());
+          }
+        });
+        syncMany(costs);
+        broadcastTerminal(`💰 Synced ${costs.length} cost entries from VPS`);
+      }
+
+      res.json({ synced: costs.length, costs });
+    } else {
+      res.json({ synced: 0, error: 'Remote query failed' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // GET /api/agent-runs — recent run history
