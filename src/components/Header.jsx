@@ -1,6 +1,6 @@
 import { getGatewayInfo } from '../services/openclawApi.js'
 
-export default function Header({ wsConnected, gatewayOnline, isExecuting, onExecute }) {
+export default function Header({ wsConnected, gatewayOnline, isExecuting, isSyncing, onExecute, onSyncVPS }) {
   const gwInfo = getGatewayInfo()
 
   return (
@@ -29,6 +29,28 @@ export default function Header({ wsConnected, gatewayOnline, isExecuting, onExec
           <div className={`connection-dot ${wsConnected ? '' : 'disconnected'}`} />
           {wsConnected ? 'ONLINE' : 'OFFLINE'}
         </div>
+
+        {/* Sync from VPS button */}
+        <button
+          onClick={onSyncVPS}
+          disabled={isSyncing || isExecuting}
+          style={{
+            marginLeft: 8,
+            padding: '6px 14px',
+            fontSize: 11,
+            fontWeight: 600,
+            fontFamily: 'var(--font-mono)',
+            background: isSyncing ? 'rgba(168, 85, 247, 0.2)' : 'rgba(168, 85, 247, 0.1)',
+            border: '1px solid rgba(168, 85, 247, 0.3)',
+            borderRadius: 6,
+            color: '#a855f7',
+            cursor: (isSyncing || isExecuting) ? 'not-allowed' : 'pointer',
+            opacity: (isSyncing || isExecuting) ? 0.5 : 1,
+            transition: 'all 0.2s ease',
+          }}
+        >
+          {isSyncing ? '🔄 SYNCING...' : '☁️ SYNC FROM VPS'}
+        </button>
 
         <button
           className={`execute-btn ${isExecuting ? 'running' : ''}`}

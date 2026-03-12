@@ -18,6 +18,7 @@ export default function App() {
   const [activityLog, setActivityLog] = useState([])
   const [terminalLog, setTerminalLog] = useState([])
   const [isExecuting, setIsExecuting] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
   const wsRef = useRef(null)
 
   // ─── Gateway Health Check ──────────────────────────────
@@ -152,6 +153,31 @@ export default function App() {
     }
   }
 
+  // ─── Sync Data from VPS ───────────────────────────────
+  async function handleSyncVPS() {
+    setIsSyncing(true)
+    addActivity('orchestrator', '🔄 Syncing data from Hostinger VPS...', 'running')
+    try {
+      const res = await fetch(API_BASE + '/api/sync-trends', { method: 'POST' })
+      const contentType = res.headers.get('content-type')
+      if (contentType && contentType.includes('application/json')) {
+        const result = await res.json()
+        if (result.success) {
+          await fetchData()
+          addActivity('orchestrator', `✅ Sincronizado: ${result.count} videos`, 'completed')
+        } else {
+          addActivity('orchestrator', `❌ Error: ${result.error}`, 'failed')
+        }
+      } else {
+        addActivity('system', '❌ VPS returned non-JSON response', 'failed')
+      }
+    } catch (err) {
+      addActivity('system', `❌ Sync error: ${err.message}`, 'failed')
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
   // ─── Re-analyze / refresh from VPS ────────────────────
   async function handleAnalyze() {
     setIsExecuting(true)
@@ -178,7 +204,9 @@ export default function App() {
         wsConnected={wsConnected}
         gatewayOnline={gatewayOnline}
         isExecuting={isExecuting}
+        isSyncing={isSyncing}
         onExecute={handleExecute}
+        onSyncVPS={handleSyncVPS}
       />
 
       <nav className="tab-nav">

@@ -187,6 +187,19 @@ app.get('/api/trends', (req, res) => {
   res.json(trends);
 });
 
+// 🆕 Manually trigger sync from VPS Express API
+app.post('/api/sync-trends', async (req, res) => {
+  try {
+    broadcastAgentStatus('Henry', 'active', '🔄 Manual VPS Data Sync initiated...');
+    await fetchRemoteTrends();
+    
+    const count = db.prepare('SELECT COUNT(*) as count FROM trends').get();
+    res.json({ success: true, count: count.count });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/trends/top', (req, res) => {
   const top = db.prepare(`
     SELECT * FROM trends
@@ -279,32 +292,58 @@ app.post('/api/execute', async (req, res) => {
 });
 
 async function fetchRemoteTrends() {
-  broadcastTerminal('📊 Syncing viral trends from VPS...');
-  const result = await vpsHostExec(`sqlite3 -json ${REMOTE_DB_HOST_PATH} 'SELECT * FROM viral_trends ORDER BY velocity_score DESC LIMIT 50;'`);
+  broadcastTerminal('📊 Syncing viral trends from VPS API...');
+  broadcastTerminal(`🛰️ Fetching from http://${VPS_HOST}:3001/api/trends`);
   
-  if (result.ok && result.output) {
-    try {
-      const trends = JSON.parse(result.output);
-      const upsert = db.prepare(`
-        INSERT OR REPLACE INTO trends
-        (platform, trigger_keyword, video_url, views, likes, velocity_score, scraped_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `);
-      const syncMany = db.transaction((items) => {
-        for (const t of items) {
-          upsert.run(t.platform, t.keyword, t.video_url, t.views, t.likes, t.velocity_score, t.scraped_at);
-        }
-      });
-      syncMany(trends);
-      
-      // Broadcast update
-      const msg = JSON.stringify({ type: 'trends_update', trends, timestamp: new Date().toISOString() });
-      for (const client of clients) client.send(msg);
-      
-      broadcast({ agent: 'orchestrator', status: 'completed', message: '🦅 Protocol Complete' });
-    } catch (e) {
-      broadcastTerminal(`⚠️ JSON Parse Error: ${e.message}`);
+  try {
+    const response = await fetch(`http://${VPS_HOST}:3001/api/trends`);
+    if (!response.ok) {
+      broadcastTerminal(`❌ VPS API returned ${response.status}`);
+      return;
     }
+    
+    const trends = await response.json();
+    broadcastTerminal(`✅ Received ${trends.length} videos from VPS`);
+    
+    // Clear old local trends and insert fresh VPS data
+    db.exec('DELETE FROM trends');
+    
+    const upsert = db.prepare(`
+      INSERT INTO trends
+      (platform, trigger_keyword, video_url, caption, hook_transcript, audio_url, views, likes, velocity_score, trigger_type, scraped_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const syncMany = db.transaction((items) => {
+      for (const t of items) {
+        upsert.run(
+          t.platform,
+          t.trigger_keyword || t.keyword,
+          t.video_url,
+          t.caption || '',
+          t.hook_transcript || '',
+          t.audio_url || '',
+          t.views || 0,
+          t.likes || 0,
+          t.velocity_score || 0,
+          t.trigger_type || 'Unclassified',
+          t.scraped_at || new Date().toISOString()
+        );
+      }
+    });
+    syncMany(trends);
+    
+    broadcastTerminal(`💾 Saved ${trends.length} trends to local database`);
+    
+    // Broadcast real-time update to frontend
+    const msg = JSON.stringify({ type: 'trends_update', trends, timestamp: new Date().toISOString() });
+    for (const client of clients) {
+      if (client.readyState === 1) client.send(msg);
+    }
+    
+    broadcastAgentStatus('Henry', 'completed', `🦅 Synced ${trends.length} videos from VPS`);
+  } catch (e) {
+    broadcastTerminal(`❌ Fetch Error: ${e.message}`);
+    broadcastAgentStatus('Henry', 'active', `❌ Sync failed: ${e.message}`);
   }
 }
 
