@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { REAL_VIRAL_CONCEPTS } from '../data/viralConceptsReal'
 
 const TRIGGER_COLORS = {
   'The Flex': { bg: 'rgba(234, 179, 8, 0.12)', color: '#eab308', border: 'rgba(234, 179, 8, 0.2)' },
@@ -8,18 +9,8 @@ const TRIGGER_COLORS = {
   'The Hustle': { bg: 'rgba(34, 197, 94, 0.12)', color: '#4ade80', border: 'rgba(34, 197, 94, 0.2)' },
 }
 
-const CONCEPT_TEMPLATES = [
-  { angle: 'Before vs After', reach: 'High', audience: 'Gen Z + Millennials', hashtags: ['#transformation', '#glow'] },
-  { angle: 'POV Storytelling', reach: 'High', audience: 'Mexican Youth (18-25)', hashtags: ['#pov', '#corridos'] },
-  { angle: 'Family Flex', reach: 'Medium', audience: 'Mexican Families', hashtags: ['#familia', '#orgullo'] },
-  { angle: 'Late Night Vibes', reach: 'High', audience: 'Night Owl Community', hashtags: ['#3am', '#corridos'] },
-  { angle: 'Dance Challenge', reach: 'High', audience: 'Everyone', hashtags: ['#challenge', '#baile'] },
-  { angle: 'Street to Success', reach: 'Medium', audience: 'Hustle Community', hashtags: ['#hustle', '#grind'] },
-  { angle: 'Emotional Reaction', reach: 'High', audience: 'Women 18-35', hashtags: ['#reaction', '#llorar'] },
-  { angle: 'Outfit/Style Check', reach: 'Medium', audience: 'Fashion Community', hashtags: ['#outfit', '#texana'] },
-  { angle: 'Remix/Mashup', reach: 'High', audience: 'Music Lovers', hashtags: ['#remix', '#mashup'] },
-  { angle: 'Tu Nombre en un Corrido', reach: 'High', audience: 'Personalization Fans', hashtags: ['#tunombre', '#corrido'] },
-]
+// Using REAL viral concepts from 252 scraped videos (500K+ views)
+// Generated from actual TikTok data
 
 export default function ViralConceptsPanel({ trends, isExecuting, onAnalyze }) {
   const [filter, setFilter] = useState('all')
@@ -37,19 +28,18 @@ export default function ViralConceptsPanel({ trends, isExecuting, onAnalyze }) {
 
   const concepts = useMemo(() => {
     const topTrends = trends?.filter(t => t.velocity_score >= 15).slice(0, 10) || []
-    return CONCEPT_TEMPLATES.map((template, i) => {
-      const trend = topTrends[i % topTrends.length]
-      const triggerType = trend?.trigger_type || 'The Flex'
+    // Use REAL viral concepts from scraped data
+    return REAL_VIRAL_CONCEPTS.map((concept, i) => {
       return {
-        id: i,
-        title: trend?.caption?.slice(0, 50) || `Concept ${i + 1}`,
-        angle: template.angle,
-        triggerType,
-        hashtags: [trend?.trigger_keyword, ...template.hashtags].filter(Boolean).slice(0, 4),
-        reach: template.reach,
-        audience: template.audience,
-        velocity: trend?.velocity_score || 0,
-        views: trend?.views || 0,
+        id: concept.id,
+        title: concept.title,
+        hook: concept.hook,
+        triggerType: concept.tipo_contenido,
+        hashtags: concept.hashtags,
+        reach: concept.alcance,
+        audience: concept.ejemplo_real,
+        example: concept.ejemplo_real,
+        views: 0,
       }
     })
   }, [trends])
@@ -136,7 +126,7 @@ export default function ViralConceptsPanel({ trends, isExecuting, onAnalyze }) {
               </div>
 
               <div className="concept-title">{concept.title}</div>
-              <div className="concept-angle">🎯 {concept.angle}</div>
+              <div className="concept-angle">🎯 {concept.hook}</div>
 
               <div className="concept-hashtags">
                 {concept.hashtags.map((h, i) => (
@@ -145,7 +135,7 @@ export default function ViralConceptsPanel({ trends, isExecuting, onAnalyze }) {
               </div>
 
               <div className="concept-footer">
-                <span className="concept-audience">👥 {concept.audience}</span>
+                <span className="concept-audience">📊 {concept.example}</span>
                 {concept.views > 0 && (
                   <span className="concept-views">
                     {(concept.views / 1000000).toFixed(1)}M views
