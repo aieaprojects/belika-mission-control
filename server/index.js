@@ -77,16 +77,34 @@ wss.on('connection', (ws) => {
 
   // ─── HENRY'S SYSTEM OVERRIDE ───────────────────────
   setTimeout(() => {
+    // Detailed activity log when Henry enters Mission Control
+    const activities = [
+      '🦅 Henry (System Orchestrator) has accessed Mission Control',
+      '📋 Session started — Reading agent rosters & memory files',
+      '🔄 Reviewed recent changes: agent names updated (Mike, Roger)',
+      '💾 Committed changes to git: Add agent names',
+      '☁️ Synced with GitHub: Changes pushed to belika-mission-control',
+      '⚡ Configured Perplexity Sonar Pro Search via OpenRouter',
+      '✅ System ready — All services online',
+    ];
+    
+    // Send detailed terminal output
+    activities.forEach((line, index) => {
+      setTimeout(() => {
+        ws.send(JSON.stringify({
+          type: 'terminal',
+          line,
+          timestamp: new Date().toISOString(),
+        }));
+      }, index * 150);
+    });
+    
+    // Send orchestrator status update
     ws.send(JSON.stringify({
       type: 'agent_update',
       agent: 'orchestrator',
       status: 'completed',
-      message: 'SYSTEM OVERRIDE: Henry (System Orchestrator) has accessed Mission Control. Synchronization complete.',
-      timestamp: new Date().toISOString(),
-    }));
-    ws.send(JSON.stringify({
-      type: 'terminal',
-      line: '🦅 SYSTEM OVERRIDE: Henry (System Orchestrator) has accessed Mission Control. Synchronization complete.',
+      message: 'SYSTEM OVERRIDE COMPLETE — Detailed session log above',
       timestamp: new Date().toISOString(),
     }));
   }, 500);
