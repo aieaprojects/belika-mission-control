@@ -103,10 +103,30 @@ wss.on('connection', (ws) => {
     ws.send(JSON.stringify({
       type: 'agent_update',
       agent: 'orchestrator',
-      status: 'completed',
+      status: 'active',
       message: 'SYSTEM OVERRIDE COMPLETE — Detailed session log above',
       timestamp: new Date().toISOString(),
     }));
+
+    // Broadcast real-time agent status roster
+    setTimeout(() => {
+      ws.send(JSON.stringify({
+        type: 'agent_status_roster',
+        agents: [
+          { name: 'Henry', role: 'System Orchestrator / COO', status: 'active', codename: 'orchestrator' },
+          { name: 'Mike', role: 'Director of Intelligence', status: 'idle', codename: 'data_miner' },
+          { name: 'Roger', role: 'VP of Creative', status: 'idle', codename: 'signal_processor' },
+        ],
+        timestamp: new Date().toISOString(),
+      }));
+      
+      // Terminal output for agent roster
+      ws.send(JSON.stringify({
+        type: 'terminal',
+        line: '👥 AGENT ROSTER — Henry: 🟢 ACTIVE | Mike: ⚪ IDLE | Roger: ⚪ IDLE',
+        timestamp: new Date().toISOString(),
+      }));
+    }, 1000);
   }, 500);
 
   ws.on('close', () => clients.delete(ws));
@@ -116,6 +136,38 @@ function broadcast(data) {
   const msg = JSON.stringify({ type: 'agent_update', ...data, timestamp: new Date().toISOString() });
   for (const client of clients) {
     if (client.readyState === 1) client.send(msg);
+  }
+}
+
+function broadcastAgentStatus(agentName, status, message) {
+  const agentCodes = {
+    'Henry': 'orchestrator',
+    'Mike': 'data_miner',
+    'Roger': 'signal_processor',
+  };
+  
+  // Broadcast agent status update
+  const msg = JSON.stringify({
+    type: 'agent_status_update',
+    agent: agentCodes[agentName] || agentName.toLowerCase().replace(' ', '_'),
+    name: agentName,
+    status,
+    message,
+    timestamp: new Date().toISOString(),
+  });
+  for (const client of clients) {
+    if (client.readyState === 1) client.send(msg);
+  }
+  
+  // Also send terminal update
+  const statusIcon = status === 'active' || status === 'running' ? '🟢' : status === 'idle' ? '⚪' : '🔴';
+  const terminalMsg = JSON.stringify({
+    type: 'terminal',
+    line: `${statusIcon} ${agentName}: ${status.toUpperCase()} — ${message}`,
+    timestamp: new Date().toISOString(),
+  });
+  for (const client of clients) {
+    if (client.readyState === 1) client.send(terminalMsg);
   }
 }
 
@@ -144,13 +196,25 @@ app.get('/api/trends/top', (req, res) => {
   res.json(top);
 });
 
+// In-memory agent status (updated in real-time)
+let agentStatuses = {
+  orchestrator: { name: 'Henry', role: 'System Orchestrator / COO', status: 'idle' },
+  data_miner: { name: 'Mike', role: 'Director of Intelligence', status: 'idle' },
+  signal_processor: { name: 'Roger', role: 'VP of Creative', status: 'idle' },
+};
+
 app.get('/api/agents', (req, res) => {
   const agents = [
-    { name: 'Henry', role: 'System Orchestrator / COO', codename: 'orchestrator', status: 'idle' },
-    { name: 'Mike', role: 'Director of Intelligence', codename: 'data_miner', status: 'idle' },
-    { name: 'Roger', role: 'VP of Creative', codename: 'signal_processor', status: 'idle' },
+    { name: 'Henry', role: 'System Orchestrator / COO', codename: 'orchestrator', status: agentStatuses.orchestrator.status },
+    { name: 'Mike', role: 'Director of Intelligence', codename: 'data_miner', status: agentStatuses.data_miner.status },
+    { name: 'Roger', role: 'VP of Creative', codename: 'signal_processor', status: agentStatuses.signal_processor.status },
   ];
   res.json(agents);
+});
+
+// Get real-time agent status
+app.get('/api/agents/status', (req, res) => {
+  res.json(agentStatuses);
 });
 
 app.get('/api/opex', async (req, res) => {
@@ -183,23 +247,34 @@ app.post('/api/execute', async (req, res) => {
   res.json({ status: 'dispatched' });
 
   try {
-    broadcast({ agent: 'data_miner', status: 'running', message: '⛏️ Starting remote scraper...' });
+    // Henry assigns task to Mike (Data Miner)
+    broadcastAgentStatus('Henry', 'active', 'Assigning research protocol to Mike');
+    broadcastAgentStatus('Mike', 'running', '⛏️ Starting TikTok/Instagram scraper...');
     
     // Run scraper on VPS
     const result = await vpsExec(`python3 ${SCRAPER_SCRIPT}`);
     
     if (result.ok) {
       broadcastTerminal(result.output);
-      broadcast({ agent: 'data_miner', status: 'completed', message: '✅ Scraping complete' });
+      broadcastAgentStatus('Mike', 'completed', '✅ Scraping complete — Data collected');
+      
+      // Henry assigns analysis to Roger (Signal Processor)
+      broadcastAgentStatus('Henry', 'active', 'Tasking Roger with signal analysis');
+      broadcastAgentStatus('Roger', 'running', '🧠 Processing viral trends & patterns...');
       
       // Fetch fresh data
       await fetchRemoteTrends();
+      
+      broadcastAgentStatus('Roger', 'completed', '✅ Signal processing complete');
+      broadcastAgentStatus('Henry', 'active', '🦅 Protocol Complete — All agents idle');
     } else {
       broadcastTerminal(`❌ ERROR: ${result.error || result.output}`);
-      broadcast({ agent: 'orchestrator', status: 'failed', message: '❌ Remote execution failed' });
+      broadcastAgentStatus('Mike', 'failed', '❌ Scraper failed');
+      broadcastAgentStatus('Henry', 'active', '⚠️ Protocol failed — Review logs');
     }
   } catch (err) {
     broadcastTerminal(`❌ FATAL: ${err.message}`);
+    broadcastAgentStatus('Henry', 'active', '❌ Fatal error encountered');
   }
 });
 
